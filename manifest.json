@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Phishing Detector Demo",
+  "version": "1.0",
+  "description": "Detects phishing websites",
+  "permissions": ["tabs", "activeTab", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
