@@ -1,13 +1,233 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Phishing Detector</title>
-  </head>
-  <body>
-    <h2>Phishing Detector</h2>
-    <button id="checkBtn">Check Current URL</button>
-    <p id="result"></p>
-
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 350px;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .container {
+            padding: 25px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        /* Safety Status Cards */
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            color: #333;
+            text-align: center;
+            display: none;
+        }
+        
+        .safe-card {
+            border-left: 5px solid #00C851;
+        }
+        
+        .unsafe-card {
+            border-left: 5px solid #ff4444;
+        }
+        
+        .checking-card {
+            border-left: 5px solid #ffbb33;
+        }
+        
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .status-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .status-message {
+            font-size: 14px;
+            line-height: 1.4;
+            margin-bottom: 15px;
+            color: #666;
+        }
+        
+        /* Buttons */
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .primary-btn {
+            background: #4285f4;
+            color: white;
+        }
+        
+        .primary-btn:hover {
+            background: #3367d6;
+            transform: translateY(-2px);
+        }
+        
+        .danger-btn {
+            background: #ff4444;
+            color: white;
+        }
+        
+        .danger-btn:hover {
+            background: #cc0000;
+            transform: translateY(-2px);
+        }
+        
+        .secondary-btn {
+            background: #f8f9fa;
+            color: #333;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .secondary-btn:hover {
+            background: #e8e8e8;
+            transform: translateY(-2px);
+        }
+        
+        .success-btn {
+            background: #00C851;
+            color: white;
+        }
+        
+        .success-btn:hover {
+            background: #007E33;
+            transform: translateY(-2px);
+        }
+        
+        /* URL Display */
+        .url-display {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 12px;
+            word-break: break-all;
+            text-align: center;
+        }
+        
+        /* Loading Animation */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 11px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">🛡️ SafeBrowse</div>
+            <div class="subtitle">AI-Powered URL Safety Checker</div>
+        </div>
+        
+        <!-- URL Display -->
+        <div class="url-display" id="urlDisplay">
+            Checking current website...
+        </div>
+        
+        <!-- Checking Status -->
+        <div class="status-card checking-card" id="checkingCard">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>Analyzing website safety...</div>
+            </div>
+        </div>
+        
+        <!-- Safe Website Card -->
+        <div class="status-card safe-card" id="safeCard">
+            <div class="status-icon">✅</div>
+            <div class="status-title">All Clear!</div>
+            <div class="status-message">
+                This website appears to be safe and legitimate. 
+                No security threats detected.
+            </div>
+            <button class="success-btn" id="continueBtn">
+                🚀 Continue Browsing
+            </button>
+        </div>
+        
+        <!-- Unsafe Website Card -->
+        <div class="status-card unsafe-card" id="unsafeCard">
+            <div class="status-icon">⚠️</div>
+            <div class="status-title">Security Warning!</div>
+            <div class="status-message">
+                This website has been flagged as potentially dangerous. 
+                It may contain phishing attempts or malicious content.
+            </div>
+            <div class="button-group">
+                <button class="secondary-btn" id="goBackBtn">
+                    ← Go Back
+                </button>
+                <button class="danger-btn" id="proceedBtn">
+                    ⚠️ Proceed Anyway
+                </button>
+            </div>
+        </div>
+        
+    </div>
+    
     <script src="popup.js"></script>
-  </body>
+</body>
 </html>

@@ -1,13 +1,26 @@
 {
   "manifest_version": 3,
-  "name": "Phishing Detector Demo",
+  "name": "URL Safety Checker",
   "version": "1.0",
-  "description": "Detects phishing websites",
-  "permissions": ["tabs", "activeTab", "storage"],
+  "description": "Automatically check website safety before loading",
+  "permissions": [
+    "activeTab",
+    "webNavigation",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "URL Safety Checker"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }
