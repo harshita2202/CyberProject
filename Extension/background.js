@@ -1,20 +1,9 @@
-// List of safe websites (whitelist)
+// Global fallback whitelist (for when backend is down)
 const SAFE_WEBSITES = [
-    'google.com',
-    'github.com',
-    'stackoverflow.com',
-    'wikipedia.org',
-    'microsoft.com',
-    'apple.com',
-    'youtube.com',
-    'facebook.com',
-    'instagram.com',
-    'twitter.com',
-    'linkedin.com',
-    'reddit.com',
-    'amazon.com',
-    'netflix.com',
-    'spotify.com'
+    'google.com', 'github.com', 'stackoverflow.com', 'wikipedia.org',
+    'microsoft.com', 'apple.com', 'youtube.com', 'facebook.com',
+    'instagram.com', 'twitter.com', 'linkedin.com', 'reddit.com',
+    'amazon.com', 'netflix.com', 'spotify.com'
 ];
 
 // Track which tabs we're currently checking to avoid duplicates
@@ -28,65 +17,78 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     }
 });
 
-// Function to check if URL is safe
+// Function to check if URL is safe (reusable, now with ML backend)
+async function checkIfUrlIsSafe(url) {
+    try {
+        const response = await fetch('http://localhost:5000/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
+        const result = await response.json();
+        console.log(`Backend ML Check: ${url} - Confidence: ${result.confidence}`);
+        return { isSafe: result.isSafe, confidence: result.confidence };
+    } catch (error) {
+        console.error('Backend check failed—using whitelist fallback');
+        // Fallback to old whitelist
+        try {
+            const urlObj = new URL(url);
+            const hostname = urlObj.hostname;
+            const isSafe = SAFE_WEBSITES.some(safeSite => 
+                hostname.includes(safeSite) || hostname.endsWith('.' + safeSite)
+            );
+            return { isSafe: isSafe, confidence: 1.0 };  // Full confidence on fallback
+        } catch (parseError) {
+            console.error('URL parse failed—default unsafe');
+            return { isSafe: false, confidence: 0.0 };
+        }
+    }
+}
+
+// Function to check URL safety on navigation
 function checkUrlSafety(url, tabId) {
     // Avoid checking the same tab multiple times
     if (checkingTabs.has(tabId)) return;
     checkingTabs.add(tabId);
     
-    console.log('🔍 Checking URL:', url);
+    console.log('🔍 Checking URL for phishing:', url);
     
     try {
         const urlObj = new URL(url);
         const hostname = urlObj.hostname;
         
-        // Check if website is in our safe list
-        const isSafe = SAFE_WEBSITES.some(safeSite => 
-            hostname.includes(safeSite) || hostname.endsWith('.' + safeSite)
-        );
-        
-        console.log(`✅ Safety result for ${hostname}: ${isSafe ? 'SAFE' : 'UNSAFE'}`);
-        
-        // Store the result
-        chrome.storage.local.set({ 
-            [url]: { 
-                isSafe: isSafe, 
-                checkedAt: new Date().toISOString(),
-                hostname: hostname
-            } 
+        // Async ML backend check
+        checkIfUrlIsSafe(url).then(result => {
+            const isSafe = result.isSafe;
+            console.log(`Phish Verdict for ${hostname}: ${isSafe ? 'SAFE' : 'UNSAFE'} (Conf: ${result.confidence})`);
+            
+            // Store the full result (including confidence for popup)
+            const fullResult = { isSafe, confidence: result.confidence, checkedAt: new Date().toISOString(), hostname };
+            chrome.storage.local.set({ [url]: fullResult });
+            
+            if (!isSafe) {
+                // Unsafe—block with warning
+                showWarningPage(tabId, url);
+            }
+            // Safe sites load normally
+        }).catch(error => {
+            console.error('Safety check failed:', error);
+            // Default to unsafe on total failure
+            chrome.storage.local.set({ [url]: { isSafe: false, confidence: 0.0 } });
+            showWarningPage(tabId, url);
         });
         
-        if (!isSafe) {
-            // Unsafe website - show warning and block
-            showWarningPage(tabId, url);
-        }
-        // Safe websites just load normally
-        
     } catch (error) {
-        console.error('❌ Error checking URL:', error);
+        console.error('Error parsing URL:', error);
     } finally {
-        // Remove from checking set
+        // Clean up
         checkingTabs.delete(tabId);
-    }
-}
-
-// Function to check if URL is safe (reusable)
-function checkIfUrlIsSafe(url) {
-    try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-        
-        return SAFE_WEBSITES.some(safeSite => 
-            hostname.includes(safeSite) || hostname.endsWith('.' + safeSite)
-        );
-    } catch (error) {
-        return false;
     }
 }
 
 // Function to show warning page for unsafe websites
 function showWarningPage(tabId, originalUrl) {
-    console.log('🔴 Unsafe website - blocking:', originalUrl);
+    console.log('🔴 Blocking phishing site:', originalUrl);
     
     // Create a simple HTML file for the warning page
     const warningHtml = `
@@ -149,9 +151,9 @@ function showWarningPage(tabId, originalUrl) {
     <body>
         <div class="container">
             <h1>⚠️ SECURITY WARNING</h1>
-            <p>This website is not in our safe list and may pose security risks.</p>
+            <p>This website has been flagged as a potential phishing risk by our AI detector.</p>
             <div class="url">${originalUrl}</div>
-            <p>We recommend only visiting trusted websites.</p>
+            <p>Proceed at your own risk—consider going back to safety.</p>
             <div class="buttons">
                 <button class="back-btn" id="backButton">← Go Back to Safety</button>
                 <button class="proceed-btn" id="proceedButton">⚠️ Proceed Anyway</button>
@@ -190,12 +192,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse({ isSafe: null, hostname: 'Unknown' });
             }
         });
-        return true;
+        return true;  // Keep message channel open for async
     }
     
     if (request.action === "checkUrlNow") {
-        const isSafe = checkIfUrlIsSafe(request.url);
-        sendResponse({ isSafe: isSafe });
-        return true;
+        checkIfUrlIsSafe(request.url).then(result => {
+            sendResponse({ isSafe: result.isSafe, confidence: result.confidence });
+        }).catch(error => {
+            console.error('Manual check failed:', error);
+            sendResponse({ isSafe: false, confidence: 0.0 });  // Default to unsafe on error
+        });
+        return true;  // Async response
     }
 });

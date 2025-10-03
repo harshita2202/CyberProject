@@ -9,10 +9,11 @@
     "storage",
     "tabs"
   ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+ "host_permissions": [
+  "http://*/*",
+  "https://*/*",
+  "http://localhost:5000/*"
+],
   "background": {
     "service_worker": "background.js"
   },
