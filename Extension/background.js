@@ -1,11 +1,3 @@
-// Global fallback whitelist (for when backend is down)
-const SAFE_WEBSITES = [
-    'google.com', 'github.com', 'stackoverflow.com', 'wikipedia.org',
-    'microsoft.com', 'apple.com', 'youtube.com', 'facebook.com',
-    'instagram.com', 'twitter.com', 'linkedin.com', 'reddit.com',
-    'amazon.com', 'netflix.com', 'spotify.com'
-];
-
 // Track which tabs we're currently checking to avoid duplicates
 const checkingTabs = new Set();
 
@@ -17,7 +9,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     }
 });
 
-// Function to check if URL is safe (reusable, now with ML backend)
+// Function to check if URL is safe (always uses ML backend—no whitelist)
 async function checkIfUrlIsSafe(url) {
     try {
         const response = await fetch('http://localhost:5000/check', {
@@ -25,27 +17,20 @@ async function checkIfUrlIsSafe(url) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: url })
         });
-        const result = await response.json();
-        console.log(`Backend ML Check: ${url} - Confidence: ${result.confidence}`);
-        return { isSafe: result.isSafe, confidence: result.confidence };
-    } catch (error) {
-        console.error('Backend check failed—using whitelist fallback');
-        // Fallback to old whitelist
-        try {
-            const urlObj = new URL(url);
-            const hostname = urlObj.hostname;
-            const isSafe = SAFE_WEBSITES.some(safeSite => 
-                hostname.includes(safeSite) || hostname.endsWith('.' + safeSite)
-            );
-            return { isSafe: isSafe, confidence: 1.0 };  // Full confidence on fallback
-        } catch (parseError) {
-            console.error('URL parse failed—default unsafe');
-            return { isSafe: false, confidence: 0.0 };
+        if (!response.ok) {
+            throw new Error(`Backend error: ${response.status}`);
         }
+        const result = await response.json();
+        console.log(`Backend ML Check for ${url}: Confidence ${result.confidence}`);
+        return { isSafe: result.isSafe, confidence: result.confidence, riskScore: result.riskScore };
+    } catch (error) {
+        console.error('Backend check failed—defaulting to unsafe for safety');
+        // Default to unsafe/block if backend down (no whitelist—pure ML focus)
+        return { isSafe: false, confidence: 0.0, riskScore: 1.0 };
     }
 }
 
-// Function to check URL safety on navigation
+// Function to check URL safety on navigation (connected to backend/model)
 function checkUrlSafety(url, tabId) {
     // Avoid checking the same tab multiple times
     if (checkingTabs.has(tabId)) return;
@@ -57,13 +42,13 @@ function checkUrlSafety(url, tabId) {
         const urlObj = new URL(url);
         const hostname = urlObj.hostname;
         
-        // Async ML backend check
+        // Async ML backend check (always sends to model—no whitelist)
         checkIfUrlIsSafe(url).then(result => {
             const isSafe = result.isSafe;
-            console.log(`Phish Verdict for ${hostname}: ${isSafe ? 'SAFE' : 'UNSAFE'} (Conf: ${result.confidence})`);
+            console.log(`Phish Verdict for ${hostname}: ${isSafe ? 'SAFE' : 'UNSAFE'} (Conf: ${result.confidence}, Risk: ${result.riskScore})`);
             
-            // Store the full result (including confidence for popup)
-            const fullResult = { isSafe, confidence: result.confidence, checkedAt: new Date().toISOString(), hostname };
+            // Store the full result (including confidence/riskScore for popup)
+            const fullResult = { isSafe, confidence: result.confidence, riskScore: result.riskScore, checkedAt: new Date().toISOString(), hostname };
             chrome.storage.local.set({ [url]: fullResult });
             
             if (!isSafe) {
@@ -74,7 +59,7 @@ function checkUrlSafety(url, tabId) {
         }).catch(error => {
             console.error('Safety check failed:', error);
             // Default to unsafe on total failure
-            chrome.storage.local.set({ [url]: { isSafe: false, confidence: 0.0 } });
+            chrome.storage.local.set({ [url]: { isSafe: false, confidence: 0.0, riskScore: 1.0 } });
             showWarningPage(tabId, url);
         });
         
