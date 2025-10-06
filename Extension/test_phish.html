@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Test - Phishing Simulation</title></head>
+<body style="font-family: Arial, sans-serif; padding: 40px;">
+  <h1>Test Phishing Page (Local)</h1>
+  <p>This is a harmless local page used to test your extension's detection & popup behaviour.</p>
+
+  <form>
+    <label>Email: <input type="email" name="email" /></label><br><br>
+    <label>Password: <input type="password" name="pwd" /></label><br><br>
+    <button type="button" onclick="alert('This is only a test — do not submit real credentials')">Login (Test)</button>
+  </form>
+
+  <p>URL for testing (if server runs on port 8000): <code>http://localhost:8000/test_phish.html</code></p>
+</body>
+</html>

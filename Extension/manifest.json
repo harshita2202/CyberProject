@@ -2,25 +2,27 @@
   "manifest_version": 3,
   "name": "URL Safety Checker",
   "version": "1.0",
-  "description": "Automatically check website safety before loading",
+  "description": "AI-powered Chrome extension that automatically checks and warns you about unsafe or phishing websites.",
   "permissions": [
     "activeTab",
     "webNavigation",
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
- "host_permissions": [
-  "http://*/*",
-  "https://*/*",
-  "http://localhost:5000/*"
-],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost:5000/*"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+     "type": "module"
   },
   "action": {
     "default_popup": "popup.html",
     "default_title": "URL Safety Checker"
   },
+
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }

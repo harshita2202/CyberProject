@@ -1,3 +1,4 @@
+// popup.js
 document.addEventListener('DOMContentLoaded', function() {
     const urlDisplay = document.getElementById('urlDisplay');
     const checkingCard = document.getElementById('checkingCard');
@@ -7,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const continueBtn = document.getElementById('continueBtn');
     const goBackBtn = document.getElementById('goBackBtn');
     const proceedBtn = document.getElementById('proceedBtn');
+
+	// Settings: Auto-block toggle elements
+	const autoBlockToggle = document.getElementById('autoBlockToggle');
+	const autoBlockLabel = document.getElementById('autoBlockLabel');
 
     // Create confidence display elements dynamically
     const safeConfidence = document.createElement('div');
@@ -24,9 +29,42 @@ document.addEventListener('DOMContentLoaded', function() {
     goBackBtn.addEventListener('click', goBack);
     proceedBtn.addEventListener('click', proceedAnyway);
 
-    showCard('checking');
+	showCard('checking');
 
-    // Get current tab info
+	// Initialize auto-block toggle from storage
+	if (autoBlockToggle) {
+		chrome.storage.local.get(['autoBlockEnabled'], (res) => {
+			const enabled = Boolean(res.autoBlockEnabled);
+			autoBlockToggle.checked = enabled;
+			autoBlockLabel.textContent = enabled ? 'On' : 'Off';
+		});
+		autoBlockToggle.addEventListener('change', () => {
+			const enabled = autoBlockToggle.checked;
+			autoBlockLabel.textContent = enabled ? 'On' : 'Off';
+			chrome.storage.local.set({ autoBlockEnabled: enabled });
+		});
+	}
+
+    // If opened as an auto-warning popup, there will be a blocked param
+    const params = new URLSearchParams(window.location.search);
+    const blockedUrl = params.get('blocked');
+    if (blockedUrl) {
+        const decoded = decodeURIComponent(blockedUrl);
+        urlDisplay.textContent = decoded;
+        // Get stored result if available to show confidence
+        chrome.storage.local.get([decoded], (res) => {
+            const r = res[decoded];
+            if (r && r.confidence !== undefined) {
+                unsafeConfidence.textContent = `Confidence: ${Number(r.confidence).toFixed(2)}%`;
+            } else {
+                unsafeConfidence.textContent = `Confidence: Unknown`;
+            }
+        });
+        showCard('unsafe');
+        return;
+    }
+
+    // Normal behaviour: popup invoked from action icon
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         const currentTab = tabs[0];
         const currentUrl = currentTab.url;
@@ -98,16 +136,58 @@ function visitSite() {
 }
 
 function goBack() {
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        const tabId = tabs[0].id;
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            func: () => window.history.back()
+    // For the auto-popup case the user may not have the original tab in focus.
+    // We'll attempt to find any tab with the blocked URL and navigate it back.
+    const params = new URLSearchParams(window.location.search);
+    const blockedUrl = params.get('blocked');
+    if (blockedUrl) {
+        const target = decodeURIComponent(blockedUrl);
+        // find any tab that matches the blocked URL and navigate it back
+        chrome.tabs.query({}, (tabs) => {
+            for (const t of tabs) {
+                if (t.url && t.url.startsWith(target)) {
+                    // navigate back in that tab
+                    chrome.scripting.executeScript({
+                        target: { tabId: t.id },
+                        func: () => window.history.back()
+                    });
+                    break;
+                }
+            }
+            window.close();
         });
-        window.close();
-    });
+    } else {
+        // normal popup: just navigate the current tab back
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            const tabId = tabs[0].id;
+            chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                func: () => window.history.back()
+            });
+            window.close();
+        });
+    }
 }
 
 function proceedAnyway() {
-    window.close(); 
+	// If auto-popup, temporarily allow the domain and reopen the URL in a new tab
+	const params = new URLSearchParams(window.location.search);
+	const blockedUrl = params.get('blocked');
+	if (blockedUrl) {
+		const decoded = decodeURIComponent(blockedUrl);
+		let hostname = decoded;
+		try { hostname = new URL(decoded).hostname; } catch (e) { /* keep as is */ }
+		const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes temporary allow
+		chrome.storage.local.get(['temporaryAllowlist'], (res) => {
+			const list = res.temporaryAllowlist || {};
+			list[hostname] = expiresAt;
+			chrome.storage.local.set({ temporaryAllowlist: list }, () => {
+				chrome.tabs.create({ url: decoded });
+				window.close();
+			});
+		});
+	} else {
+		// Normal popup: simply close
+		window.close();
+	}
 }
