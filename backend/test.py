@@ -8,7 +8,8 @@ def test():
         "https://github.com",
         "http://testsafebrowsing.appspot.com",  # This should be forced as phishing
         "https://bit.ly/test",  # Short URL
-        "http://example.com"
+        "http://example.com",
+        "https://edition.cnn.com/"
     ]
     
     for url in test_urls:
@@ -26,6 +27,7 @@ def test():
                 print(f"✅ Status: {result['status']}")
                 print(f"   Confidence: {result['confidence']}%")
                 print(f"   Risk Score: {result['riskScore']}")
+                print(f"   Category: {result.get('category', 'N/A')}")
                 print(f"   Is Safe: {result['isSafe']}")
                 print(f"   Is Phishing: {result['isPhishing']}")
             else:

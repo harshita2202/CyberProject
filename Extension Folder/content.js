@@ -1,5 +1,5 @@
 function showPhishingResult(data) {
-  const { status, confidence, isSafe } = data;
+  const { status, confidence, isSafe, category } = data;
 
   // Inject styles dynamically
   const style = document.createElement("style");
@@ -59,7 +59,7 @@ function showPhishingResult(data) {
   if (isSafe) {
     const popup = document.createElement("div");
     popup.className = "safe-popup";
-    popup.innerHTML = `✅ ${status}<br>Confidence: ${confidence.toFixed(2)}%`;
+    popup.innerHTML = `✅ ${status}<br>Category: ${category || 'Unknown'}<br>Confidence: ${confidence.toFixed(2)}%`;
     document.body.appendChild(popup);
     setTimeout(() => popup.remove(), 4000);
   } else {
@@ -69,6 +69,7 @@ function showPhishingResult(data) {
       <div class="warning-box">
         <h2>⚠️ ${status}</h2>
         <p>This website may be harmful.</p>
+        <p>Category: ${category || 'Unknown'}</p>
         <p>Confidence: ${confidence.toFixed(2)}%</p>
         <div class="buttons">
           <button id="continueBtn">Continue Anyway</button>
