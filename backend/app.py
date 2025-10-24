@@ -3,6 +3,8 @@ from flask_cors import CORS
 import pickle
 import pandas as pd
 from features import extract_url_features, categorize_website, extract_page_text, advanced_text_preprocessing, create_advanced_features
+from functools import lru_cache
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -16,9 +18,9 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
 
-# Load optional category model
+
 try:
-    # Try to load advanced model first
+    
     with open("pickle/category_model_advanced.pkl", "rb") as f:
         category_model_data = pickle.load(f)
         category_model = category_model_data['ensemble_model']
@@ -45,6 +47,12 @@ except Exception as e:
         category_label_encoder = None
         category_tfidf = None
         category_feature_columns = None
+
+# Cache for recent results to improve performance
+@lru_cache(maxsize=100)
+def cached_categorize_website(url):
+    """Cached version of website categorization."""
+    return categorize_website(url)
 
 
 @app.route("/check", methods=["POST"])
@@ -75,62 +83,64 @@ def check_phishing():
         category = "Unknown"
         category_confidence = 0.0
         
+        # First try heuristic categorization (fast, cached)
+        category = cached_categorize_website(url)
+        
+        # Then try ML if available and conditions are met
         if category_model is not None and category_label_encoder is not None:
-            page_text = extract_page_text(url)
-            if page_text and len(page_text) > 50:  # Need meaningful text
-                try:
-                    if category_tfidf is not None and category_feature_columns is not None:
-                        # Advanced model with additional features
-                        processed_text = advanced_text_preprocessing(page_text)
-                        
-                        # Transform text
-                        X_text = category_tfidf.transform([processed_text])
-                        
-                        # Create additional features
-                        temp_df = pd.DataFrame({'text': [processed_text]})
-                        advanced_features = create_advanced_features(temp_df, 'text')
-                        
-                        # Combine features
-                        import numpy as np
-                        X_combined = np.hstack([X_text.toarray(), advanced_features.values])
-                        
-                        # Apply feature selection and scaling if available
-                        if category_feature_selector is not None:
-                            X_selected = category_feature_selector.transform(X_combined)
-                            if category_scaler is not None:
-                                X_final = category_scaler.transform(X_selected)
+            try:
+                # Only extract page text if heuristic confidence is low
+                if category == "General/Other" or category == "Business/Commercial":
+                    page_text = extract_page_text(url)
+                    if page_text and len(page_text) > 100:  # Need meaningful text
+                        if category_tfidf is not None and category_feature_columns is not None:
+                            # Advanced model with additional features
+                            processed_text = advanced_text_preprocessing(page_text)
+                            
+                            # Transform text
+                            X_text = category_tfidf.transform([processed_text])
+                            
+                            # Create additional features
+                            temp_df = pd.DataFrame({'text': [processed_text]})
+                            advanced_features = create_advanced_features(temp_df, 'text')
+                            
+                            # Combine features
+                            import numpy as np
+                            X_combined = np.hstack([X_text.toarray(), advanced_features.values])
+                            
+                            # Apply feature selection and scaling if available
+                            if category_feature_selector is not None:
+                                X_selected = category_feature_selector.transform(X_combined)
+                                if category_scaler is not None:
+                                    X_final = category_scaler.transform(X_selected)
+                                else:
+                                    X_final = X_selected
                             else:
-                                X_final = X_selected
+                                X_final = X_combined
+                            
+                            proba = category_model.predict_proba(X_final)[0]
+                            cat_pred_idx = int(category_model.predict(X_final)[0])
+                            ml_confidence = float(proba[cat_pred_idx] * 100)
+                            ml_category = category_label_encoder.inverse_transform([cat_pred_idx])[0]
+                            
+                            # Use ML result if confidence is high enough
+                            if ml_confidence > 40.0:
+                                category = ml_category
+                                category_confidence = ml_confidence
                         else:
-                            X_final = X_combined
-                        
-                        # Predict
-                        proba = category_model.predict_proba(X_final)[0]
-                        cat_pred_idx = int(category_model.predict(X_final)[0])
-                        category_confidence = float(proba[cat_pred_idx] * 100)
-                        category = category_label_encoder.inverse_transform([cat_pred_idx])[0]
-                    else:
-                        # Basic model
-                        proba = category_model.predict_proba([page_text])[0]
-                        cat_pred_idx = int(category_model.predict([page_text])[0])
-                        category_confidence = float(proba[cat_pred_idx] * 100)
-                        category = category_label_encoder.inverse_transform([cat_pred_idx])[0]
-                    
-                    # Only use ML prediction if confidence is reasonable
-                    if category_confidence < 25.0:
-                        category = categorize_website(url)
-                        category_confidence = 0.0
-                        
-                except Exception as e:
-                    print(f"ML category prediction failed: {e}")
-                    category = categorize_website(url)
-                    category_confidence = 0.0
-            else:
-                category = categorize_website(url)
-                category_confidence = 0.0
-        else:
-            category = categorize_website(url)
-            category_confidence = 0.0
+                            # Basic model fallback
+                            proba = category_model.predict_proba([page_text])[0]
+                            cat_pred_idx = int(category_model.predict([page_text])[0])
+                            ml_confidence = float(proba[cat_pred_idx] * 100)
+                            ml_category = category_label_encoder.inverse_transform([cat_pred_idx])[0]
+                            
+                            if ml_confidence > 40.0:
+                                category = ml_category
+                                category_confidence = ml_confidence
+                            
+            except Exception as e:
+                print(f"ML category prediction failed: {e}")
+                # Keep heuristic result
 
         print(f"🔍 URL: {url} | Safe: {is_safe} | Confidence: {confidence:.2f}%")
 
