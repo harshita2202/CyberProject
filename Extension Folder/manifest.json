@@ -8,7 +8,8 @@
     "notifications",
     "webNavigation",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
   "host_permissions": [
     "http://localhost:5000/*",
@@ -20,8 +21,10 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_end"
+      "js": ["content.js"]
     }
-  ]
+  ],
+  "action": {
+    "default_title": "Phishing Shield Active"
+  }
 }

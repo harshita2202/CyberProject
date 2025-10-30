@@ -1,7 +1,7 @@
 function showPhishingResult(data) {
   const { status, confidence, isSafe, category } = data;
 
-  // Inject styles dynamically
+  // Inject styles dynamically (once)
   const style = document.createElement("style");
   style.textContent = `
     .safe-popup {
@@ -48,28 +48,36 @@ function showPhishingResult(data) {
     }
     #continueBtn { background-color: #4CAF50; color: white; }
     #goBackBtn { background-color: #f44336; color: white; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { 
+      from { opacity: 0; transform: translateY(-10px); } 
+      to { opacity: 1; transform: translateY(0); } 
+    }
   `;
   document.head.appendChild(style);
 
-  // Remove existing elements
+  // Remove existing popups if any
   document.querySelector(".safe-popup")?.remove();
   document.querySelector(".warning-overlay")?.remove();
 
   if (isSafe) {
+    // ✅ Safe site popup (includes category)
     const popup = document.createElement("div");
     popup.className = "safe-popup";
-    popup.innerHTML = `✅ ${status}<br>Category: ${category || 'Unknown'}<br>Confidence: ${confidence.toFixed(2)}%`;
+    popup.innerHTML = `
+      ✅ ${status}<br>
+      Confidence: ${confidence.toFixed(2)}%<br>
+      <span style="font-weight: bold;">Category:</span> ${category || "Unknown"}
+    `;
     document.body.appendChild(popup);
     setTimeout(() => popup.remove(), 4000);
   } else {
+    // ⚠️ Unsafe warning overlay (no category line)
     const overlay = document.createElement("div");
     overlay.className = "warning-overlay";
     overlay.innerHTML = `
       <div class="warning-box">
         <h2>⚠️ ${status}</h2>
         <p>This website may be harmful.</p>
-        <p>Category: ${category || 'Unknown'}</p>
         <p>Confidence: ${confidence.toFixed(2)}%</p>
         <div class="buttons">
           <button id="continueBtn">Continue Anyway</button>
