@@ -11,7 +11,7 @@
     "activeTab",
     "storage"
   ],
-  "host_permissions": [
+  "host_permissions": [ 
     "http://localhost:5000/*",
     "<all_urls>"
   ],
@@ -26,5 +26,9 @@
   ],
   "action": {
     "default_title": "Phishing Shield Active"
-  }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  } 
 }

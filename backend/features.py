@@ -140,7 +140,7 @@ def categorize_website(url):
           "npmjs", "pypi", "docker", "kubernetes", "dev.to", "medium.com"], "Developer/Tech"),
         
         # Streaming/Entertainment
-        (["netflix", "youtube", "spotify", "hulu", "primevideo", "disney", 
+        (["netflix", "youtube", "spotify", "hulu", "primevideo", "disney", "instagram", 
           "twitch", "vimeo", "soundcloud"], "Streaming/Entertainment"),
         
         # Shopping/E-commerce

@@ -2,7 +2,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   const url = details.url;
   if (!url.startsWith("http")) return;
 
-  // Inject "checking" popup immediately
+  // 🔹 Step 1: Inject a temporary "checking" popup immediately
   chrome.scripting.executeScript({
     target: { tabId: details.tabId },
     func: () => {
@@ -23,8 +23,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
         }
       `;
       document.head.appendChild(style);
-      const existing = document.querySelector(".checking-popup");
-      if (!existing) {
+      if (!document.querySelector(".checking-popup")) {
         const popup = document.createElement("div");
         popup.className = "checking-popup";
         popup.innerText = "🔄 Checking site safety...";
@@ -35,7 +34,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000); // ⏱️ allow long processing (20s)
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     const response = await fetch("http://localhost:5000/check", {
       method: "POST",
@@ -48,34 +47,57 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
     if (!response.ok) throw new Error("Backend error");
 
     const result = await response.json();
-
-    // ✅ Save latest result for this tab
     chrome.storage.local.set({ [`result_${details.tabId}`]: result });
 
-    // Inject content.js if not already injected
-    chrome.scripting.executeScript({
-      target: { tabId: details.tabId },
-      files: ["content.js"]
-    }, () => {
-      // Now update popup with actual result
+    // 🔹 Step 2: Get user's blocked categories
+    chrome.storage.sync.get(["blockedCategories"], (data) => {
+      const blocked = (data.blockedCategories || []).map(c => c.toLowerCase());
+      const siteCategory = (result.category || "").toLowerCase();
+
+
+      // 🚫 If blocked, redirect to our blockedOverlay page
+      if (blocked.includes(siteCategory)) {
+        // Remove checking popup first
+        chrome.scripting.executeScript({
+          target: { tabId: details.tabId },
+          func: () => {
+            document.querySelector(".checking-popup")?.remove();
+          }
+        });
+        
+        // Save category name to storage
+        chrome.storage.local.set({ currentBlockedCategory: result.category }, () => {
+          // Redirect to blocked overlay page (with category in URL)
+          chrome.tabs.update(details.tabId, {
+            url: chrome.runtime.getURL(
+              `blockedOverlay/blockedOverlay.html?category=${encodeURIComponent(result.category)}`
+            )
+          });
+        });
+        return; // stop further processing
+      }
+
+      // ✅ Otherwise show phishing/safe result popup
       chrome.scripting.executeScript({
         target: { tabId: details.tabId },
-        func: (data) => {
-          // Remove the loading popup
-          document.querySelector(".checking-popup")?.remove();
-          window.phishingData = data;
-          if (typeof showPhishingResult === "function") {
-            showPhishingResult(window.phishingData);
-          }
-        },
-        args: [result]
+        files: ["content.js"]
+      }, () => {
+        chrome.scripting.executeScript({
+          target: { tabId: details.tabId },
+          func: (data) => {
+            document.querySelector(".checking-popup")?.remove();
+            window.phishingData = data;
+            if (typeof showPhishingResult === "function") {
+              showPhishingResult(window.phishingData);
+            }
+          },
+          args: [result]
+        });
       });
     });
 
   } catch (err) {
     console.error("❌ Phishing check failed:", err);
-
-    // Show timeout or error popup on the webpage
     chrome.scripting.executeScript({
       target: { tabId: details.tabId },
       func: () => {
@@ -87,39 +109,10 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 });
 
 
-// ✅ Re-show popup when clicking the extension icon
+// 🔹 When extension icon is clicked: open options/settings overlay
 chrome.action.onClicked.addListener(async (tab) => {
-  chrome.storage.local.get([`result_${tab.id}`], (data) => {
-    const result = data[`result_${tab.id}`];
-    if (result) {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"]
-      }, () => {
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (storedData) => {
-            if (typeof showPhishingResult === "function") {
-              showPhishingResult(storedData);
-            }
-          },
-          args: [result]
-        });
-      });
-    } else {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const existing = document.querySelector(".checking-popup");
-          if (!existing) {
-            const popup = document.createElement("div");
-            popup.className = "checking-popup";
-            popup.innerText = "ℹ️ No recent result. Please reload the page.";
-            document.body.appendChild(popup);
-            setTimeout(() => popup.remove(), 4000);
-          }
-        }
-      });
-    }
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["options.js"]
   });
 });

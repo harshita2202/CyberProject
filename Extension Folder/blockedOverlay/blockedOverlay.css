@@ -1,0 +1,51 @@
+.blocked-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: "Segoe UI", Arial, sans-serif;
+  text-align: center;
+  z-index: 9999999;
+  backdrop-filter: blur(6px);
+}
+
+.blocked-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 60px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  max-width: 400px;
+}
+
+.icon {
+  font-size: 50px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  margin: 0;
+  color: #d32f2f;
+  font-size: 28px;
+}
+
+h2 {
+  color: #1a73e8;
+  margin: 10px 0;
+  font-size: 22px;
+}
+
+p {
+  color: #555;
+  font-size: 15px;
+  margin-top: 8px;
+}
+
+#redirect-text {
+  margin-top: 16px;
+  font-weight: 500;
+  color: #444;
+}
