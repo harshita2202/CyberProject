@@ -1,18 +1,24 @@
+// Standard category framework - matches backend categorization
 const categories = [
-  "News",
-  "Streaming Services",
+  "E-commerce/Shopping",
+  "Entertainment/Streaming",
+  "Social Media/Networking",
+  "Search Engine",
+  "News/Media",
+  "Education/Learning",
+  "Finance/Banking",
+  "Productivity/Tools",
+  "Health/Medical",
+  "Travel/Booking",
+  "Government/Public Services",
   "Sports",
-  "Photography",
-  "Law and Government",
-  "Health and Fitness",
-  "Games",
-  "E-Commerce",
-  "Forums",
-  "Food",
-  "Education",
-  "Computers and Technology",
-  "Business/Corporate",
-  "Adult"
+  "Gaming",
+  "Food/Recipes",
+  "Real Estate",
+  "Jobs/Careers",
+  "Technology/Software",
+  "Forums/Communities",
+  "General/Other"
 ];
 
 const listContainer = document.getElementById("categoryList");
@@ -30,7 +36,7 @@ categories.forEach((cat) => {
   toggle.className = "switch";
   const input = document.createElement("input");
   input.type = "checkbox";
-  input.value = cat.toLowerCase();
+  input.value = cat.toLowerCase(); // Store lowercase for matching
 
   const slider = document.createElement("span");
   slider.className = "slider";

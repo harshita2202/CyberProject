@@ -1,6 +1,22 @@
+// Add at top before listener
+const processedNavigations = new Map();
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  processedNavigations.delete(tabId);
+});
+
 chrome.webNavigation.onCommitted.addListener(async (details) => {
   const url = details.url;
   if (!url.startsWith("http")) return;
+  if (details.frameId !== 0) return; // only top-level frame
+
+  const normalizedUrl = url.split('#')[0];
+  const now = Date.now();
+  const lastEntry = processedNavigations.get(details.tabId);
+  if (lastEntry && lastEntry.url === normalizedUrl && (now - lastEntry.time) < 2000) {
+    return; // avoid duplicate processing for the same navigation
+  }
+  processedNavigations.set(details.tabId, { url: normalizedUrl, time: now });
 
   // 🔹 Step 1: Inject a temporary "checking" popup immediately
   chrome.scripting.executeScript({

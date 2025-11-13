@@ -9,6 +9,10 @@ from datetime import datetime
 import whois
 from functools import lru_cache
 import warnings
+import urllib3
+
+# Suppress SSL warnings when verify=False is used
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore')
 
 @lru_cache(maxsize=100)
@@ -117,81 +121,238 @@ def extract_url_features(url):
 
 
 def categorize_website(url):
-    """Return a broad website category based on enhanced domain and content analysis."""
+    """
+    Classify website into its SINGLE most appropriate category based on PRIMARY purpose.
+    Fixed version that properly handles e-commerce and streaming sites.
+    """
     try:
         parsed = urlparse(url)
         domain = (parsed.netloc or "").lower()
         path = (parsed.path or "").lower()
+        full_url = (domain + path).lower()
     except Exception:
         domain = ""
         path = ""
+        full_url = ""
 
-    # Comprehensive keyword to category mapping
-    keyword_categories = [
-        # Search engines
-        (["google", "bing", "yahoo", "duckduckgo", "baidu", "yandex"], "Search Engine"),
-        
-        # Social media
-        (["facebook", "instagram", "twitter", "x.com", "tiktok", "snapchat", 
-          "linkedin", "reddit", "pinterest", "tumblr", "whatsapp", "telegram"], "Social Media"),
-        
-        # Developer/Tech
-        (["github", "gitlab", "bitbucket", "stackoverflow", "stackexchange", 
-          "npmjs", "pypi", "docker", "kubernetes", "dev.to", "medium.com"], "Developer/Tech"),
-        
-        # Streaming/Entertainment
-        (["netflix", "youtube", "spotify", "hulu", "primevideo", "disney", "instagram", 
-          "twitch", "vimeo", "soundcloud"], "Streaming/Entertainment"),
-        
-        # Shopping/E-commerce
-        (["amazon", "ebay", "walmart", "aliexpress", "etsy", "shopify", 
-          "bestbuy", "target", "shop", "store"], "E-commerce/Shopping"),
-        
-        # News/Media
-        (["cnn", "bbc", "nytimes", "reuters", "bloomberg", "theguardian", 
-          "wsj", "forbes", "news", "press"], "News/Media"),
-        
-        # Finance/Banking
-        (["bankofamerica", "chase", "wellsfargo", "paypal", "stripe", 
-          "coinbase", "robinhood", "fidelity", "bank", "finance"], "Finance/Banking"),
-        
-        # Education
-        (["harvard", "mit.edu", "stanford", "coursera", "udemy", "edx", 
-          "khanacademy", "duolingo", "edu"], "Education"),
-        
-        # Government
-        ([".gov", "whitehouse", "government"], "Government"),
-        
-        # Health
-        (["webmd", "mayoclinic", "nih.gov", "healthline", "health", "medical"], "Health/Medical"),
-        
-        # Travel
-        (["booking", "expedia", "airbnb", "tripadvisor", "hotels", "travel"], "Travel"),
-        
-        # Gaming
-        (["steam", "epicgames", "playstation", "xbox", "nintendo", "game"], "Gaming"),
-        
-        # Cloud/Productivity
-        (["google.com/drive", "dropbox", "onedrive", "notion", "trello", "slack"], "Productivity/Cloud"),
+    # Helper function for domain matching
+    def domain_matches(target_domain, domain_to_check):
+        """Check if domain matches target domain or subdomain of target."""
+        if domain_to_check == target_domain:
+            return True
+        if domain_to_check.endswith('.' + target_domain):
+            return True
+        return False
+
+    # ========== CRITICAL FIX: PROPER DOMAIN MATCHING ==========
+    
+    # E-commerce/Shopping - ABSOLUTE PRIORITY
+    ecommerce_domains = [
+        "amazon.com", "amazon.in", "amazon.co.uk", "amazon.de", "amazon.fr",
+        "amazon.co.jp", "amazon.ca", "amazon.com.au", "amazon.com.br",
+        "amazon.it", "amazon.es", "amazon.mx", "amazon.ae", "amazon.sg", "amazon.nl",
+        "ebay.com", "ebay.in", "ebay.co.uk", 
+        "flipkart.com", "walmart.com", "target.com", "etsy.com", 
+        "aliexpress.com", "alibaba.com", "shopify.com", "myntra.com", 
+        "bestbuy.com", "costco.com"
     ]
-
-    # Check domain and path
-    full_url = domain + path
-    for keywords, category in keyword_categories:
-        for keyword in keywords:
-            if keyword in full_url:
-                return category
-
-    # TLD-based fallback
-    if domain.endswith(".gov"):
-        return "Government"
+    
+    for ecom_domain in ecommerce_domains:
+        if domain_matches(ecom_domain, domain):
+            return "E-commerce/Shopping"
+    
+    # Entertainment/Streaming - HIGH PRIORITY  
+    streaming_domains = [
+        "netflix.com", "hotstar.com", "primevideo.com", "disneyplus.com",
+        "hulu.com", "youtube.com", "spotify.com", "zee5.com", "sonyliv.com",
+        "voot.com", "mxplayer.in", "twitch.tv", "vimeo.com", "soundcloud.com",
+        "hbo.com", "hbonow.com", "paramount.com", "peacock.com",
+        "crunchyroll.com", "funimation.com", "amazonprime.com"
+    ]
+    
+    for stream_domain in streaming_domains:
+        if domain_matches(stream_domain, domain):
+            return "Entertainment/Streaming"
+    
+    # Social Media/Networking
+    social_domains = [
+        "facebook.com", "instagram.com", "twitter.com", "x.com",
+        "tiktok.com", "snapchat.com", "linkedin.com", "pinterest.com",
+        "tumblr.com", "whatsapp.com", "telegram.org", "discord.com",
+        "reddit.com"
+    ]
+    
+    for social_domain in social_domains:
+        if domain_matches(social_domain, domain):
+            return "Social Media/Networking"
+    
+    # Search Engine - with proper Google service handling
+    search_engine_domains = ["bing.com", "yahoo.com", "duckduckgo.com", "baidu.com", "yandex.com", "ask.com"]
+    for search_domain in search_engine_domains:
+        if domain_matches(search_domain, domain):
+            return "Search Engine"
+    
+    # Google services - FIXED LOGIC
+    if "google.com" in domain:
+        # YouTube is streaming
+        if "youtube.com" in domain or "youtu.be" in domain:
+            return "Entertainment/Streaming"
+        # Google Drive, Docs, etc are productivity tools
+        if any(service in path for service in ["/drive", "/docs", "/sheets", "/slides", "/mail", "/calendar"]):
+            return "Productivity/Tools"
+        # Google Maps
+        if "/maps" in path:
+            return "Productivity/Tools"
+        # Only classify as Search Engine for actual search or main page
+        if "/search" in path or path in ["", "/"]:
+            return "Search Engine"
+        # Default for other Google services
+        return "Technology/Software"
+    
+    # Gaming
+    gaming_domains = [
+        "steam.com", "steampowered.com", "epicgames.com", "playstation.com",
+        "xbox.com", "nintendo.com", "roblox.com", "minecraft.net",
+        "origin.com", "battle.net", "uplay.com"
+    ]
+    for game_domain in gaming_domains:
+        if domain_matches(game_domain, domain):
+            return "Gaming"
+    
+    # News/Media
+    news_domains = [
+        "cnn.com", "bbc.com", "bbc.co.uk", "nytimes.com", "reuters.com",
+        "bloomberg.com", "theguardian.com", "wsj.com", "forbes.com",
+        "ndtv.com", "indiatoday.in", "thehindu.com", "hindustantimes.com"
+    ]
+    for news_domain in news_domains:
+        if domain_matches(news_domain, domain):
+            return "News/Media"
+    
+    # Finance/Banking
+    finance_domains = [
+        "bankofamerica.com", "chase.com", "wellsfargo.com", "paypal.com",
+        "stripe.com", "coinbase.com", "robinhood.com", "fidelity.com"
+    ]
+    for finance_domain in finance_domains:
+        if domain_matches(finance_domain, domain):
+            return "Finance/Banking"
+    
+    # Education/Learning
+    education_domains = [
+        "coursera.org", "udemy.com", "edx.org", "khanacademy.org",
+        "duolingo.com", "tcsion.com"
+    ]
+    for edu_domain in education_domains:
+        if domain_matches(edu_domain, domain):
+            return "Education/Learning"
+    
     if domain.endswith(".edu"):
-        return "Education"
-    if domain.endswith(".org"):
-        return "Organization/Nonprofit"
-    if domain.endswith((".co", ".com")):
-        return "Business/Commercial"
-
+        return "Education/Learning"
+    
+    # Technology/Software
+    tech_domains = [
+        "github.com", "gitlab.com", "npmjs.com", "pypi.org", "docker.com",
+        "kubernetes.io", "chatgpt.com", "openai.com", "claude.ai", "anthropic.com",
+        "grok.x.ai", "x.ai", "tcs.com", "microsoft.com", "apple.com",
+        "oracle.com", "ibm.com"
+    ]
+    for tech_domain in tech_domains:
+        if domain_matches(tech_domain, domain):
+            return "Technology/Software"
+    
+    # Forums/Communities
+    forum_domains = ["stackoverflow.com", "quora.com"]
+    for forum_domain in forum_domains:
+        if domain_matches(forum_domain, domain):
+            return "Forums/Communities"
+    
+    # Travel/Booking
+    travel_domains = ["booking.com", "expedia.com", "airbnb.com", "tripadvisor.com", "hotels.com"]
+    for travel_domain in travel_domains:
+        if domain_matches(travel_domain, domain):
+            return "Travel/Booking"
+    
+    # Jobs/Careers
+    jobs_domains = ["indeed.com", "monster.com", "glassdoor.com"]
+    for jobs_domain in jobs_domains:
+        if domain_matches(jobs_domain, domain):
+            return "Jobs/Careers"
+    
+    if "linkedin.com" in domain and "/jobs" in path:
+        return "Jobs/Careers"
+    
+    # Health/Medical
+    health_domains = ["webmd.com", "mayoclinic.org", "healthline.com"]
+    for health_domain in health_domains:
+        if domain_matches(health_domain, domain):
+            return "Health/Medical"
+    
+    # Sports
+    sports_domains = ["espn.com", "nfl.com", "nba.com", "mlb.com"]
+    for sports_domain in sports_domains:
+        if domain_matches(sports_domain, domain):
+            return "Sports"
+    
+    # Productivity/Tools
+    productivity_domains = [
+        "dropbox.com", "onedrive.com", "notion.so", "trello.com",
+        "slack.com", "asana.com", "monday.com", "zoom.us", "zoom.com",
+        "gmail.com", "outlook.com"
+    ]
+    for prod_domain in productivity_domains:
+        if domain_matches(prod_domain, domain):
+            return "Productivity/Tools"
+    
+    # ========== KEYWORD-BASED FALLBACK ==========
+    # Only use keywords if no domain matched
+    
+    # Strong e-commerce indicators
+    ecommerce_indicators = ["add to cart", "shopping cart", "buy now", "shop now", "add to bag", "checkout"]
+    if any(indicator in full_url for indicator in ecommerce_indicators):
+        return "E-commerce/Shopping"
+    
+    ecommerce_keywords = ["shop", "store", "cart", "checkout", "buy", "purchase", "product"]
+    if any(kw in full_url for kw in ecommerce_keywords):
+        return "E-commerce/Shopping"
+    
+    # Strong streaming indicators
+    streaming_indicators = ["watch now", "stream now", "full episode", "season", "trailer", "episode"]
+    if any(indicator in full_url for indicator in streaming_indicators):
+        return "Entertainment/Streaming"
+    
+    streaming_keywords = ["watch", "stream", "movie", "video", "series", "tv shows"]
+    if any(kw in full_url for kw in streaming_keywords):
+        return "Entertainment/Streaming"
+    
+    # Other categories (unchanged)
+    if "game" in full_url:
+        return "Gaming"
+    
+    news_keywords = ["news", "press", "journal", "article"]
+    if any(kw in full_url for kw in news_keywords):
+        return "News/Media"
+    
+    finance_keywords = ["bank", "finance", "credit", "loan", "investment"]
+    if any(kw in full_url for kw in finance_keywords):
+        return "Finance/Banking"
+    
+    education_keywords = ["university", "college", "school", "course", "learn", "tutorial"]
+    if any(kw in full_url for kw in education_keywords):
+        return "Education/Learning"
+    
+    health_keywords = ["health", "medical", "hospital", "clinic", "doctor", "patient"]
+    if any(kw in full_url for kw in health_keywords):
+        return "Health/Medical"
+    
+    travel_keywords = ["travel", "flight", "hotel", "vacation", "trip"]
+    if any(kw in full_url for kw in travel_keywords):
+        return "Travel/Booking"
+    
+    if domain.endswith(".gov") or "government" in full_url:
+        return "Government/Public Services"
+    
+    # Fallback
     return "General/Other"
 
 
@@ -418,55 +579,97 @@ def create_advanced_features(df, text_col):
         # Enhanced domain keywords
         text_lower = text.lower()
         
-        # Technology keywords
-        tech_kw = ['software', 'technology', 'computer', 'digital', 'app', 'code', 
-                   'programming', 'developer', 'api', 'cloud', 'data', 'ai', 'ml']
+        # Technology/Software keywords - PRIMARY purpose indicators
+        tech_kw = ['software', 'technology', 'computer', 'digital', 'app', 'application',
+                   'code', 'programming', 'developer', 'api', 'cloud', 'data', 'ai', 'ml',
+                   'algorithm', 'system', 'platform', 'tech']
         tech_score = sum(1 for w in tech_kw if w in text_lower)
         
-        # Business keywords
-        business_kw = ['business', 'company', 'corporate', 'management', 'finance',
-                       'market', 'industry', 'service', 'professional', 'enterprise']
-        business_score = sum(1 for w in business_kw if w in text_lower)
+        # Productivity/Tools keywords - PRIMARY purpose indicators
+        productivity_kw = ['productivity', 'tool', 'utility', 'task', 'project', 'management',
+                          'organize', 'schedule', 'calendar', 'note', 'document', 'workspace']
+        productivity_score = sum(1 for w in productivity_kw if w in text_lower)
         
-        # E-commerce keywords
-        ecom_kw = ['shop', 'buy', 'sell', 'product', 'price', 'cart', 'order',
-                   'shipping', 'delivery', 'discount', 'sale', 'payment']
+        # E-commerce/Shopping keywords - PRIMARY purpose indicators
+        ecom_kw = ['shop', 'buy', 'sell', 'product', 'price', 'cart', 'order', 'purchase',
+                   'shipping', 'delivery', 'discount', 'sale', 'payment', 'checkout',
+                   'store', 'marketplace', 'retail']
         ecom_score = sum(1 for w in ecom_kw if w in text_lower)
         
-        # Education keywords
-        edu_kw = ['education', 'learn', 'course', 'student', 'school', 'university',
-                  'study', 'teach', 'training', 'lesson', 'academic', 'research']
+        # Education/Learning keywords - PRIMARY purpose indicators
+        edu_kw = ['education', 'learn', 'learning', 'course', 'student', 'school', 'university',
+                  'college', 'study', 'teach', 'teaching', 'training', 'lesson', 'tutorial',
+                  'academic', 'research', 'curriculum', 'degree']
         edu_score = sum(1 for w in edu_kw if w in text_lower)
         
-        # News keywords
-        news_kw = ['news', 'article', 'report', 'story', 'journalist', 'breaking',
-                   'latest', 'update', 'announced', 'revealed']
+        # News/Media keywords - PRIMARY purpose indicators (journalism)
+        news_kw = ['news', 'article', 'report', 'story', 'journalist', 'journalism', 'breaking',
+                   'latest', 'update', 'announced', 'revealed', 'press', 'media', 'coverage',
+                   'headline', 'publish', 'editorial']
         news_score = sum(1 for w in news_kw if w in text_lower)
         
-        # Entertainment keywords
-        ent_kw = ['entertainment', 'movie', 'music', 'game', 'video', 'stream',
-                  'watch', 'play', 'show', 'series', 'artist']
+        # Entertainment/Streaming keywords - PRIMARY purpose indicators
+        ent_kw = ['entertainment', 'movie', 'film', 'music', 'video', 'stream', 'streaming',
+                  'watch', 'play', 'show', 'series', 'episode', 'artist', 'album', 'song',
+                  'netflix', 'youtube', 'spotify', 'podcast']
         ent_score = sum(1 for w in ent_kw if w in text_lower)
         
-        # Social keywords
-        social_kw = ['social', 'friend', 'follow', 'share', 'post', 'comment',
-                     'like', 'message', 'chat', 'community', 'profile']
+        # Social Media/Networking keywords - PRIMARY purpose indicators
+        social_kw = ['social', 'friend', 'follow', 'share', 'post', 'comment', 'like',
+                     'message', 'chat', 'connect', 'community', 'profile', 'feed', 'timeline',
+                     'network', 'social media']
         social_score = sum(1 for w in social_kw if w in text_lower)
         
-        # Health keywords
-        health_kw = ['health', 'medical', 'doctor', 'patient', 'hospital',
-                     'treatment', 'medicine', 'wellness', 'fitness', 'care']
+        # Health/Medical keywords - PRIMARY purpose indicators
+        health_kw = ['health', 'medical', 'doctor', 'physician', 'patient', 'hospital', 'clinic',
+                     'treatment', 'medicine', 'wellness', 'fitness', 'care', 'symptoms',
+                     'diagnosis', 'therapy', 'healthcare']
         health_score = sum(1 for w in health_kw if w in text_lower)
         
-        # Finance keywords
-        finance_kw = ['bank', 'banking', 'financial', 'money', 'loan', 'credit',
-                      'investment', 'trading', 'stock', 'insurance']
+        # Finance/Banking keywords - PRIMARY purpose indicators
+        finance_kw = ['bank', 'banking', 'financial', 'money', 'loan', 'credit', 'debit',
+                      'account', 'transaction', 'payment', 'insurance', 'investment', 'trading',
+                      'stock', 'fund', 'interest', 'mortgage', 'savings']
         finance_score = sum(1 for w in finance_kw if w in text_lower)
         
-        # Travel keywords
-        travel_kw = ['travel', 'hotel', 'flight', 'booking', 'vacation', 'trip',
-                     'tour', 'destination', 'resort', 'tourist']
+        # Travel/Booking keywords - PRIMARY purpose indicators
+        travel_kw = ['travel', 'hotel', 'flight', 'booking', 'vacation', 'trip', 'tour',
+                     'destination', 'resort', 'tourist', 'accommodation', 'reservation', 'journey']
         travel_score = sum(1 for w in travel_kw if w in text_lower)
+        
+        # Gaming keywords - PRIMARY purpose indicators
+        gaming_kw = ['game', 'gaming', 'gamer', 'play', 'player', 'video game', 'console',
+                     'steam', 'nintendo', 'xbox', 'playstation', 'gaming platform']
+        gaming_score = sum(1 for w in gaming_kw if w in text_lower)
+        
+        # Sports keywords - PRIMARY purpose indicators
+        sports_kw = ['sports', 'sport', 'athletic', 'athlete', 'team', 'match', 'game',
+                    'football', 'basketball', 'baseball', 'soccer', 'score', 'league']
+        sports_score = sum(1 for w in sports_kw if w in text_lower)
+        
+        # Food/Recipes keywords - PRIMARY purpose indicators
+        food_kw = ['food', 'recipe', 'cooking', 'cook', 'restaurant', 'meal', 'dish',
+                   'cuisine', 'ingredient', 'kitchen', 'dining', 'delivery']
+        food_score = sum(1 for w in food_kw if w in text_lower)
+        
+        # Real Estate keywords - PRIMARY purpose indicators
+        realestate_kw = ['real estate', 'property', 'house', 'home', 'apartment', 'rent',
+                         'lease', 'mortgage', 'listing', 'realtor', 'buyer', 'seller']
+        realestate_score = sum(1 for w in realestate_kw if w in text_lower)
+        
+        # Jobs/Careers keywords - PRIMARY purpose indicators
+        jobs_kw = ['job', 'career', 'employment', 'hire', 'hiring', 'recruitment', 'resume',
+                   'application', 'interview', 'position', 'opportunity', 'work']
+        jobs_score = sum(1 for w in jobs_kw if w in text_lower)
+        
+        # Forums/Communities keywords - PRIMARY purpose indicators
+        forum_kw = ['forum', 'discussion', 'community', 'qa', 'question', 'answer', 'thread',
+                    'post', 'reply', 'discuss', 'debate']
+        forum_score = sum(1 for w in forum_kw if w in text_lower)
+        
+        # Search Engine keywords - PRIMARY purpose indicators
+        search_kw = ['search', 'query', 'results', 'index', 'crawl', 'engine', 'find']
+        search_score = sum(1 for w in search_kw if w in text_lower)
         
         # Normalize scores
         norm = max(word_count, 1) / 100
@@ -481,7 +684,7 @@ def create_advanced_features(df, text_col):
             'question_count': question_count,
             'comma_count': comma_count,
             'tech_score': tech_score / norm,
-            'business_score': business_score / norm,
+            'productivity_score': productivity_score / norm,
             'ecommerce_score': ecom_score / norm,
             'education_score': edu_score / norm,
             'news_score': news_score / norm,
@@ -490,6 +693,13 @@ def create_advanced_features(df, text_col):
             'health_score': health_score / norm,
             'finance_score': finance_score / norm,
             'travel_score': travel_score / norm,
+            'gaming_score': gaming_score / norm,
+            'sports_score': sports_score / norm,
+            'food_score': food_score / norm,
+            'realestate_score': realestate_score / norm,
+            'jobs_score': jobs_score / norm,
+            'forum_score': forum_score / norm,
+            'search_score': search_score / norm,
             'action_score': sum(1 for w in ['buy', 'sell', 'learn', 'read', 'watch'] if w in text_lower) / norm,
             'cta_score': sum(1 for w in ['free', 'now', 'join', 'get', 'start'] if w in text_lower) / norm
         })

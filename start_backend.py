@@ -44,7 +44,7 @@ def start_backend():
         import pandas
         import sklearn
         import requests
-        import beautifulsoup4
+        from bs4 import BeautifulSoup  # beautifulsoup4 package imports as bs4
         print("✅ All required packages are installed")
     except ImportError as e:
         print(f"❌ Missing required package: {e}")
