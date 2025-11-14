@@ -126,9 +126,18 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
 
 // 🔹 When extension icon is clicked: open options/settings overlay
-chrome.action.onClicked.addListener(async (tab) => {
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["options.js"]
+chrome.action.onClicked.addListener((tab) => {
+
+  // If user is on an extension page, clicking icon should open settings
+  if (tab.url.startsWith("chrome-extension://")) {
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+
+  // Otherwise show phishing popup again
+  chrome.tabs.sendMessage(tab.id, {
+    action: "showLastPopup",
+    tabId: tab.id
   });
+
 });

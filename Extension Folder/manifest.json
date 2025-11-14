@@ -3,6 +3,7 @@
   "name": "Phishing Shield",
   "version": "1.0",
   "description": "Checks URLs for phishing using your ML backend.",
+
   "permissions": [
     "tabs",
     "notifications",
@@ -11,24 +12,40 @@
     "activeTab",
     "storage"
   ],
-  "host_permissions": [ 
+
+  "host_permissions": [
     "http://localhost:5000/*",
     "<all_urls>"
   ],
+
   "background": {
     "service_worker": "background.js"
   },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"]
     }
   ],
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content.js",
+        "options.js",
+        "blockedOverlay/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
   "action": {
     "default_title": "Phishing Shield Active"
   },
+
   "options_ui": {
     "page": "options.html",
     "open_in_tab": false
-  } 
+  }
 }

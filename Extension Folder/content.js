@@ -60,7 +60,6 @@ function showPhishingResult(data) {
   document.querySelector(".warning-overlay")?.remove();
 
   if (isSafe) {
-    // ✅ Safe site popup (includes category)
     const popup = document.createElement("div");
     popup.className = "safe-popup";
     popup.innerHTML = `
@@ -70,8 +69,8 @@ function showPhishingResult(data) {
     `;
     document.body.appendChild(popup);
     setTimeout(() => popup.remove(), 4000);
+
   } else {
-    // ⚠️ Unsafe warning overlay (no category line)
     const overlay = document.createElement("div");
     overlay.className = "warning-overlay";
     overlay.innerHTML = `
@@ -99,3 +98,18 @@ function showPhishingResult(data) {
     });
   }
 }
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "showLastPopup") {
+    const key = `result_${msg.tabId}`;
+
+    chrome.storage.local.get([key], (resultData) => {
+      const last = resultData[key];
+      if (last) {
+        showPhishingResult(last);
+      } else {
+        alert("No phishing scan result available for this tab yet.");
+      }
+    });
+  }
+});
